@@ -6,11 +6,11 @@ print(DEVICE)
 
 # dataloader
 IMAGE_SIZE = 64
-BATCH_SIZE = 128
+BATCH_SIZE = 512
 N_WORKERS = 4
 
 # train
-N_EPOCHS = 5
+N_EPOCHS = 10
 OPTIM_LR = 0.0002
 BETA1 = 0.5
 REAL_LABEL = 1.
