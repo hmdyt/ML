@@ -26,9 +26,7 @@ if socket.gethostname() == "mba2020.local":
 elif socket.gethostname() == "lxkura":
     DATA_ROOT = "/home/hamada/ML/data/celeba/"
 else:
-    from google.colab import drive
-    drive.mount('/content/drive')
-    DATA_ROOT = "drive/MyDrive/celeba/data/"
+    DATA_ROOT = "/content/drive/MyDrive/celeba/data/"
 print(f"DATA_ROOT: {DATA_ROOT}")
 
 # prepare data
