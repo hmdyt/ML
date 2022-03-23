@@ -17,17 +17,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
+import argparse
 
 from models import Generator, Discriminator, weights_init
 from constants import *
 
-if socket.gethostname() == "mba2020.local":
-    DATA_ROOT = "/Users/yuto/ML_data/"
-elif socket.gethostname() == "lxkura":
-    DATA_ROOT = "/home/hamada/ML/data/celeba/"
-else:
-    DATA_ROOT = "/content/drive/MyDrive/celeba/data/"
+parser = argparse.ArgumentParser(description='recieve hyper parameters')
+parser.add_argument('dataset_dir', type=str, help='dataset dir')
+parser.add_argument('epochs', type=int, help='n_epochs')
+parser.add_argument('batch_size', type=int, help='batch size')
+args = parser.parse_args()
+DATA_ROOT = args.dataset_dir
+N_EPOCHS = args.epochs
+BATCH_SIZE = args.batch_size
+
 print(f"DATA_ROOT: {DATA_ROOT}")
+print(f"N_EPOCHS: {N_EPOCHS}")
+print(f"BATCH_SIZE: {BATCH_SIZE}")
 
 # prepare data
 dataset = torchvision.datasets.ImageFolder(

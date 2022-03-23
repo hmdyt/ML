@@ -7,7 +7,7 @@ print(DEVICE)
 # dataloader
 IMAGE_SIZE = 64
 BATCH_SIZE = 512
-N_WORKERS = 4
+N_WORKERS = 2
 
 # train
 N_EPOCHS = 10
