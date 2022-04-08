@@ -181,7 +181,7 @@ class BiGAN:
                 self._D.train()
                 # prepare
                 batch_size = imgs.size(0)
-                label_real = torch.full((batch_size,), 1, dtype=torch.float, device=self._device)
+                label_real = torch.full((batch_size,), 0.9, dtype=torch.float, device=self._device)
                 label_fake = torch.full((batch_size,), 0, dtype=torch.float, device=self._device)
                 # train E G
                 # forward propagation
