@@ -74,6 +74,8 @@ class Discriminator(torch.nn.Module):
             torch.nn.Linear(512, 1),
         )
     def forward(self, img: Tensor, z: Tensor) -> Tensor:
+        img = img.squeeze()
+        z = z.squeeze()
         joint = torch.cat((img.view(img.size(0), -1), z), dim=1)
         Y = self.model(joint)
         return Y.squeeze_()
@@ -91,6 +93,8 @@ class BiGAN:
         fixed_z: Tensor,
         fixed_img: Tensor,
         record_dir: str,
+        model_type: str,
+        feature_map_len: int,
     ):  
         self._device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print("Device:", self._device)
@@ -108,11 +112,10 @@ class BiGAN:
         os.makedirs(self._record_dir, exist_ok=True)
         os.makedirs(self._record_dir + 'Generator', exist_ok=True)
         os.makedirs(self._record_dir + 'Encoder', exist_ok=True)
+        self._model_type = model_type
+        self._feature_map_len = feature_map_len
 
-
-        self._G = Generator(self._latent_dim, self._img_shape).to(self._device)
-        self._E = Encoder(self._latent_dim, self._img_shape).to(self._device)
-        self._D = Discriminator(self._latent_dim, self._img_shape).to(self._device)
+        self._init_models()
         self._G.apply(weights_init)
         self._E.apply(weights_init)
         self._D.apply(discriminator_weights_init)
@@ -131,6 +134,19 @@ class BiGAN:
         self._EG_scheduler = torch.optim.lr_scheduler.ExponentialLR(self._EG_optim, gamma = self._scheduler_gamma)
         self._D_scheduler = torch.optim.lr_scheduler.ExponentialLR(self._D_optim, gamma = self._scheduler_gamma)
 
+    def _init_models(self):
+        if self._model_type == '' or self._model_type == 'linear':
+            self._G = Generator(self._latent_dim, self._img_shape).to(self._device)
+            self._E = Encoder(self._latent_dim, self._img_shape).to(self._device)
+            self._D = Discriminator(self._latent_dim, self._img_shape).to(self._device)
+        elif self._model_type == 'cnn':
+            import model_cnn
+            self._G = model_cnn.Generator(self._latent_dim, self._img_shape, self._feature_map_len).to(self._device)
+            self._E = model_cnn.Encoder(self._latent_dim, self._img_shape, self._feature_map_len).to(self._device)
+            self._D = Discriminator(self._latent_dim, self._img_shape).to(self._device)
+        else:
+            raise ValueError('model_type must be linear or cnn')
+            
     def _record_loss(self, losses_D, losses_EG):
         axis_array = list(range(len(losses_EG)))
         plt.plot(axis_array, losses_EG, label='loss_EG')

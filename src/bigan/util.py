@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 def show_images64(images: any) -> plt.figure:
     if type(images) == torch.Tensor:
+        images = images.squeeze_()
         images = images.detach().cpu().numpy()
     fig = plt.figure(figsize=(8,8))
     for i in range(64):
