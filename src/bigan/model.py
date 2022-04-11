@@ -72,13 +72,15 @@ class Discriminator(torch.nn.Module):
             torch.nn.Dropout(0.4),
             torch.nn.LeakyReLU(0.2, inplace=True),
             torch.nn.Linear(512, 1),
+            torch.nn.Sigmoid()
         )
     def forward(self, img: Tensor, z: Tensor) -> Tensor:
         img = img.squeeze()
         z = z.squeeze()
         joint = torch.cat((img.view(img.size(0), -1), z), dim=1)
         Y = self.model(joint)
-        return Y.squeeze_()
+        Y = Y.squeeze()
+        return Y
 
 class BiGAN:
     def __init__(
@@ -120,7 +122,7 @@ class BiGAN:
         self._E.apply(weights_init)
         self._D.apply(discriminator_weights_init)
 
-        self._criterion = torch.nn.MSELoss()
+        self._criterion = torch.nn.BCELoss()
         self._EG_optim = torch.optim.Adam(
             [{'params': self._G.parameters()}, {'params': self._E.parameters()}],
             lr = self._lr_EG,
