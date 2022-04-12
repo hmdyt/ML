@@ -23,11 +23,9 @@ class Generator(torch.nn.Module):
             layers.append(torch.nn.LeakyReLU(0.2, inplace=True))
             return layers
         self.model = torch.nn.Sequential(
-            *unit_layer(latent_dim, 128),
-            *unit_layer(128, 256),
-            *unit_layer(256, 512),
-            *unit_layer(512, 1024),
-            torch.nn.Linear(1024, int(np.prod(img_shape) * self._n_color)),
+            *unit_layer(latent_dim, 512),
+            *unit_layer(512, 512),
+            torch.nn.Linear(512, int(np.prod(img_shape) * self._n_color)),
             torch.nn.Sigmoid()
         )
     def forward(self, z: Tensor) -> Tuple[Tensor, Tensor]:
@@ -47,11 +45,9 @@ class Encoder(torch.nn.Module):
             layers.append(torch.nn.LeakyReLU(0.2, inplace=True))
             return layers
         self.model = torch.nn.Sequential(
-            torch.nn.Linear(int(np.prod(self._img_shape)) * self._n_color, 1024),
-            *unit_layer(1024, 512, is_normalize=True),
-            *unit_layer(512, 256, is_normalize=True),
-            *unit_layer(256, 128, is_normalize=True),
-            *unit_layer(128, latent_dim, is_normalize=True),
+            torch.nn.Linear(int(np.prod(self._img_shape)) * self._n_color, 512),
+            *unit_layer(512, 512, is_normalize=True),
+            *unit_layer(512, latent_dim, is_normalize=True),
             torch.nn.Tanh()
         )
     def forward(self, img: Tensor) -> Tuple[Tensor, Tensor]:
