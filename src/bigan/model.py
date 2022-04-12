@@ -9,12 +9,13 @@ import matplotlib.pyplot as plt
 import torch
 import torchvision
 
-from util import show_images64, weights_init, discriminator_weights_init
+from util import show_images64, show_images_8by2, weights_init, discriminator_weights_init
 
 class Generator(torch.nn.Module):
-    def __init__(self, latent_dim: int, img_shape: Tuple[int, int]) -> None:
+    def __init__(self, latent_dim: int, img_shape: Tuple[int, int], n_color: int = 1) -> None:
         super(Generator, self).__init__()
         self._img_shape = img_shape
+        self._n_color = n_color
         def unit_layer(input_len: int, output_len: int, is_normalize: bool = True):
             layers = [torch.nn.Linear(input_len, output_len)]
             if is_normalize:
@@ -26,18 +27,19 @@ class Generator(torch.nn.Module):
             *unit_layer(128, 256),
             *unit_layer(256, 512),
             *unit_layer(512, 1024),
-            torch.nn.Linear(1024, int(np.prod(img_shape))),
-            torch.nn.Tanh()
+            torch.nn.Linear(1024, int(np.prod(img_shape) * self._n_color)),
+            torch.nn.Sigmoid()
         )
     def forward(self, z: Tensor) -> Tuple[Tensor, Tensor]:
         img = self.model(z)
-        img = img.view(img.size(0), *self._img_shape)
+        img = img.view(img.size(0), self._n_color, *self._img_shape)
         return img, z
 
 class Encoder(torch.nn.Module):
-    def __init__(self, latent_dim: int, img_shape: Tuple[int, int]) -> None:
+    def __init__(self, latent_dim: int, img_shape: Tuple[int, int], n_color: int = 1) -> None:
         super(Encoder, self).__init__()
         self._img_shape = img_shape
+        self._n_color = n_color
         def unit_layer(input_len: int, output_len: int, is_normalize: bool = True):
             layers = [torch.nn.Linear(input_len, output_len)]
             if is_normalize:
@@ -45,7 +47,7 @@ class Encoder(torch.nn.Module):
             layers.append(torch.nn.LeakyReLU(0.2, inplace=True))
             return layers
         self.model = torch.nn.Sequential(
-            torch.nn.Linear(np.prod(self._img_shape), 1024),
+            torch.nn.Linear(int(np.prod(self._img_shape)) * self._n_color, 1024),
             *unit_layer(1024, 512, is_normalize=True),
             *unit_layer(512, 256, is_normalize=True),
             *unit_layer(256, 128, is_normalize=True),
@@ -53,15 +55,17 @@ class Encoder(torch.nn.Module):
             torch.nn.Tanh()
         )
     def forward(self, img: Tensor) -> Tuple[Tensor, Tensor]:
-        img = img.reshape(-1, np.prod(self._img_shape))
+        img = img.view(img.size(0), -1)
         z = self.model(img)
-        img = img.view(img.size(0), *self._img_shape)
+        img = img.view(img.size(0), self._n_color, *self._img_shape)
         return img, z
 
 class Discriminator(torch.nn.Module):
-    def __init__(self, latent_dim: int, img_shape: Tuple[int, int]) -> None:
+    def __init__(self, latent_dim: int, img_shape: Tuple[int, int], n_color: int = 1) -> None:
         super(Discriminator, self).__init__()
-        joint_len: int = latent_dim + np.prod(img_shape)
+        self._img_shape = img_shape
+        self._n_color = n_color
+        joint_len: int = latent_dim + int(np.prod(img_shape)) * self._n_color
         self.model = torch.nn.Sequential(
             torch.nn.Linear(joint_len, 512),
             torch.nn.LeakyReLU(0.2, inplace=True),
@@ -75,11 +79,8 @@ class Discriminator(torch.nn.Module):
             torch.nn.Sigmoid()
         )
     def forward(self, img: Tensor, z: Tensor) -> Tensor:
-        img = img.squeeze()
-        z = z.squeeze()
         joint = torch.cat((img.view(img.size(0), -1), z), dim=1)
         Y = self.model(joint)
-        Y = Y.squeeze()
         return Y
 
 class BiGAN:
@@ -88,9 +89,11 @@ class BiGAN:
         n_epochs: int,
         latent_dim: int,
         img_shape: Tuple[int, int],
+        n_color: int,
         lr_EG: float,
         lr_D: float,
         weight_decay: float,
+        use_scheduler: bool,
         scheduler_gamma: float,
         fixed_z: Tensor,
         fixed_img: Tensor,
@@ -104,9 +107,11 @@ class BiGAN:
         self._n_epochs = n_epochs
         self._latent_dim = latent_dim
         self._img_shape = img_shape
+        self._n_color = n_color
         self._lr_EG = lr_EG
         self._lr_D = lr_D
         self._weight_decay = weight_decay
+        self._use_scheduler = use_scheduler
         self._scheduler_gamma = scheduler_gamma
         self._fixed_z = fixed_z.to(self._device)
         self._fixed_img = fixed_img.to(self._device)
@@ -138,9 +143,9 @@ class BiGAN:
 
     def _init_models(self):
         if self._model_type == '' or self._model_type == 'linear':
-            self._G = Generator(self._latent_dim, self._img_shape).to(self._device)
-            self._E = Encoder(self._latent_dim, self._img_shape).to(self._device)
-            self._D = Discriminator(self._latent_dim, self._img_shape).to(self._device)
+            self._G = Generator(self._latent_dim, self._img_shape, self._n_color).to(self._device)
+            self._E = Encoder(self._latent_dim, self._img_shape, self._n_color).to(self._device)
+            self._D = Discriminator(self._latent_dim, self._img_shape, self._n_color).to(self._device)
         elif self._model_type == 'cnn':
             import model_cnn
             self._G = model_cnn.Generator(self._latent_dim, self._img_shape, self._feature_map_len).to(self._device)
@@ -172,16 +177,7 @@ class BiGAN:
         self._E.eval()
         _, generated_z = self._E(self._fixed_img)
         generated_img, _ = self._G(generated_z)
-        fig = plt.figure(figsize=(8, 2))
-        for i in range(8):
-            ax = fig.add_subplot(2, 8, i+1)
-            ax.axis('off')
-            ax.imshow(self._fixed_img[i].cpu().detach().numpy().reshape(28, 28), cmap='gray')
-        for i in range(8, 16):
-            ax = fig.add_subplot(2, 8, i+1)
-            ax.axis('off')
-            ax.imshow(generated_img[i-8].cpu().detach().numpy().reshape(28, 28), cmap='gray')
-        fig.savefig("{}/Encoder/E_{}epoch.png".format(self._record_dir, epoch))
+        show_images_8by2(self._fixed_img, generated_img).savefig("{}/Encoder/E_{}epoch.png".format(self._record_dir, epoch))
         plt.cla()
         plt.clf()
         plt.close()
@@ -199,8 +195,8 @@ class BiGAN:
                 self._D.train()
                 # prepare
                 batch_size = imgs.size(0)
-                label_real = torch.full((batch_size,), 0.9, dtype=torch.float, device=self._device)
-                label_fake = torch.full((batch_size,), 0, dtype=torch.float, device=self._device)
+                label_real = torch.full((batch_size, 1), 0.9, dtype=torch.float, device=self._device)
+                label_fake = torch.full((batch_size, 1), 0.1, dtype=torch.float, device=self._device)
                 # train E G
                 # forward propagation
                 imgs_real, z_real = self._E(imgs.to(self._device))
@@ -234,8 +230,9 @@ class BiGAN:
                 if i % 100 == 0:
                     print("Epoch: {}, Batch: {}, Loss_EG: {:.4f}, Loss_D: {:.4f}".format(epoch, i, loss_EG.item(), loss_D.item()))
             # scheduler
-            self._EG_scheduler.step()
-            self._D_scheduler.step()
+            if self._use_scheduler: 
+                self._EG_scheduler.step()
+                self._D_scheduler.step()
             # save graph
             self._record_loss(losses_D, losses_EG)
             self._record_G_img(epoch+1)
